@@ -2,7 +2,7 @@ from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_community.tools import TavilySearchResults
 from langgraph.graph import StateGraph, END
-from typing import TypedDict
+from typing import TypedDict, List, Dict
 import os
 from dotenv import load_dotenv
 
@@ -11,6 +11,10 @@ load_dotenv()
 # Initialize Tavily search tool
 search_tool = TavilySearchResults(k=3)
 
+# ---- Global memory ----
+GLOBAL_HISTORY: List[Dict[str, str]] = []   # persists across calls
+
+
 # ---- Graph Definition ----
 class State(TypedDict):
     question: str
@@ -18,7 +22,8 @@ class State(TypedDict):
     api_key: str
     model: str
     provider: str
-    action: str  # NEW: to store decision ("search" or "direct")
+    action: str
+    history: List[Dict[str, str]]   
 
 
 # ---- Nodes ----
@@ -30,14 +35,17 @@ def validate_input(state: State):
 
 
 def preprocess(state: State):
-    """Preprocess input to set default values."""
+    """Preprocess input and inject global history."""
     if "api_key" not in state or not state["api_key"]:
         state["api_key"] = os.getenv("GROQ_API_KEY")
     if "model" not in state or not state["model"]:
         state["model"] = "llama3-70b-8192"
     if "provider" not in state or not state["provider"]:
         state["provider"] = "Groq"
-    
+
+    # Always inject global history
+    state["history"] = GLOBAL_HISTORY
+
     state["question"] = state["question"].strip()
     return state
 
@@ -53,7 +61,7 @@ def decide_action(state: State):
 
 
 def tool_search(state: State):
-    """Real Tavily search tool."""
+    """Use Tavily search tool."""
     q = state["question"]
     results = search_tool.invoke(q)  # list of search results
     state["question"] = q + "\nContext: " + str(results)
@@ -61,7 +69,7 @@ def tool_search(state: State):
 
 
 def call_llm(state: State):
-    """Call the selected LLM (Groq or OpenAI)."""
+    """Call the selected LLM (Groq or OpenAI) with conversation history."""
     provider = state["provider"]
     model = state["model"]
     api_key = state["api_key"]
@@ -73,8 +81,23 @@ def call_llm(state: State):
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
-    resp = llm.invoke(state["question"])
-    return {"answer": resp.content}
+    # Keep only last 6 messages in context for efficiency
+    trimmed_history = state["history"][-6:]
+
+    # Build messages with history + current question
+    messages = trimmed_history + [{"role": "user", "content": state["question"]}]
+    resp = llm.invoke(messages)
+
+    # Store answer
+    state["answer"] = resp.content
+
+    # Update global history (persists across calls)
+    GLOBAL_HISTORY.extend([
+        {"role": "user", "content": state["question"]},
+        {"role": "assistant", "content": resp.content}
+    ])
+
+    return state
 
 
 def postprocess(state: State):
@@ -90,7 +113,8 @@ def log_state(state: State):
         f"LOG | Action: {state.get('action')} "
         f"| Provider: {state['provider']} "
         f"| Model: {state['model']} "
-        f"| Q: {state['question']}"
+        f"| History turns: {len(GLOBAL_HISTORY)//2} "
+        f"| Last Q: {state['question']}"
     )
     return state
 
