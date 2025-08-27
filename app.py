@@ -33,7 +33,7 @@ with st.sidebar:
 
 # ---- Main title ----
 st.markdown(
-    "<h1 style='text-align: center;'>🤖 LangGraph: Build Stateful Agentic AI Graph</h1>", 
+"<h1 style='text-align: center;'>🤖 AgentDesk: Talk with Multiple AI Agents</h1>",
     unsafe_allow_html=True
 )
 
@@ -50,16 +50,26 @@ if query := st.chat_input("Enter your message:"):
     if not api_key:
         st.error("Please provide your API Key first!")
     else:
+        # Show user message immediately
+        st.session_state.messages.append({"user": query, "bot": None})
+        st.chat_message("user").write(query)
+
+        # Create placeholder for assistant
+        placeholder = st.chat_message("assistant").empty()
+
         try:
-            response = app.invoke({
-                "question": query,
-                "api_key": api_key,
-                "model": model,
-                "provider": llm_provider,
-                "answer": ""
-            })
-            st.session_state.messages.append({"user": query, "bot": response["answer"]})
-            st.chat_message("user").write(query)
-            st.chat_message("assistant").write(response["answer"])
+            with st.spinner("🤖 Thinking..."):
+                response = app.invoke({
+                    "question": query,
+                    "api_key": api_key,
+                    "model": model,
+                    "provider": llm_provider,
+                    "answer": ""
+                })
+                answer = response["answer"]
         except Exception as e:
-            st.error(f"⚠️ Error: {e}")
+            answer = f"⚠️ Error: {e}"
+
+        # Update assistant message
+        st.session_state.messages[-1]["bot"] = answer
+        placeholder.write(answer)
