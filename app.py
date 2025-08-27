@@ -1,39 +1,6 @@
-# app.py
 import streamlit as st
-from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph, END
-from typing import TypedDict
+from agent import app  # Import from agent.py
 
-# ---- Graph Definition ----
-class State(TypedDict):
-    question: str
-    answer: str
-    api_key: str
-    model: str
-    provider: str
-
-def call_llm(state: State):
-    """Call the selected LLM (Groq or OpenAI)."""
-    provider = state["provider"]
-    model = state["model"]
-    api_key = state["api_key"]
-
-    if provider == "Groq":
-        llm = ChatGroq(model=model, api_key=api_key)
-    elif provider == "OpenAI":
-        llm = ChatOpenAI(model=model, api_key=api_key)
-    else:
-        raise ValueError(f"Unsupported provider: {provider}")
-
-    resp = llm.invoke(state["question"])
-    return {"answer": resp.content}
-
-graph = StateGraph(State)
-graph.add_node("llm", call_llm)
-graph.set_entry_point("llm")
-graph.add_edge("llm", END)
-app = graph.compile()
 
 # ---- Streamlit UI ----
 st.set_page_config(page_title="LangGraph Agent", layout="wide")
@@ -63,13 +30,15 @@ with st.sidebar:
 
     usecase = st.selectbox("Select Usecase", ["Basic Chatbot", "Research Assistant"])
 
-# Main title
+
+# ---- Main title ----
 st.markdown(
     "<h1 style='text-align: center;'>🤖 LangGraph: Build Stateful Agentic AI Graph</h1>", 
     unsafe_allow_html=True
 )
 
-# Chat input + history
+
+# ---- Chat input + history ----
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
