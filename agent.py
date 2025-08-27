@@ -2,6 +2,10 @@ from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 # ---- Graph Definition ----
@@ -12,6 +16,17 @@ class State(TypedDict):
     model: str
     provider: str
 
+def preprocess(state: State):
+    """Preprocess input to set default values."""
+    if "api_key" not in state or not state["api_key"]:
+        state["api_key"]= os.getenv("GROQ_API_KEY")  # Default to Groq API key from environment
+    if "model" not in state or not state["model"]:
+        state["model"] = "llama3-70b-8192"  # Default Groq model
+    if "provider" not in state or not state["provider"]:
+        state["provider"] = "Groq"  # Default provider
+    
+    state["question"] = state["question"].strip()
+    return state
 
 def call_llm(state: State):
     """Call the selected LLM (Groq or OpenAI)."""
@@ -32,8 +47,11 @@ def call_llm(state: State):
 
 # ---- LangGraph ----
 graph = StateGraph(State)
+graph.add_node("preprocess",preprocess)
 graph.add_node("llm", call_llm)
-graph.set_entry_point("llm")
+
+graph.set_entry_point("preprocess")
+graph.add_edge("preprocess", "llm")
 graph.add_edge("llm", END)
 
 # Export compiled graph
