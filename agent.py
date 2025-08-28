@@ -38,7 +38,7 @@
 #     import requests
 
 #     api_url = "https://api-inference.huggingface.co/models/distilbert-base-uncased-finetuned-sst-2-english"
-#     headers = {"Authorization": f"Bearer {state['hugginfaceapi']}"}
+#     headers = {"Authorization": f"Bearer {state['']}"}
 #     payload = {"inputs": state["question"]}
     
 #     response = requests.post(api_url, headers=headers, json=payload)
@@ -168,15 +168,16 @@
 
 # # Compile
 # app = graph.compile()
-
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI  # 👈 add this
 from langchain_community.tools import TavilySearchResults
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, List, Dict
 import os
 from dotenv import load_dotenv
 import requests
+import streamlit as st
 
 load_dotenv()
 
@@ -225,7 +226,10 @@ def preprocess(state: State):
     if "provider" not in state or not state["provider"]:
         state["provider"] = "Groq"
 
-    state["history"] = GLOBAL_HISTORY
+    # Use session state for history
+    if "history" not in st.session_state:
+        st.session_state.history = []
+    state["history"] = st.session_state.history
     state["question"] = state["question"].strip()
     return state
 
@@ -250,14 +254,23 @@ def call_llm(state: State):
 
     if provider == "Groq":
         llm = ChatGroq(model=model, api_key=api_key)
+
     elif provider == "OpenAI":
         llm = ChatOpenAI(model=model, api_key=api_key)
+
+    elif provider == "Gemini":
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=api_key,   # 👈 Gemini key
+            temperature=0.7
+        )
+
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
+    # Keep only last 6 turns
     trimmed_history = state["history"][-6:]
-    
-    # Modify prompt based on sentiment
+
     prompt = state["question"]
     if state.get("sentiment") == "NEGATIVE":
         prompt = f"Respond empathetically: {prompt}"
@@ -267,11 +280,15 @@ def call_llm(state: State):
     messages = trimmed_history + [{"role": "user", "content": prompt}]
     resp = llm.invoke(messages)
 
+    # Some models (Gemini, Groq, OpenAI) all return .content
     state["answer"] = resp.content
-    GLOBAL_HISTORY.extend([
+
+    # Update session history
+    st.session_state.history.extend([
         {"role": "user", "content": state["question"]},
         {"role": "assistant", "content": resp.content}
     ])
+    state["history"] = st.session_state.history
     return state
 
 def postprocess(state: State):
@@ -294,7 +311,7 @@ def log_state(state: State):
 graph = StateGraph(State)
 
 graph.add_node("validate", validate_input)
-graph.add_node("sentiment", analyze_sentiment)  # sentiment before preprocessing
+graph.add_node("sentiment", analyze_sentiment)
 graph.add_node("preprocess", preprocess)
 graph.add_node("decide", decide_action)
 graph.add_node("search", tool_search)
@@ -310,7 +327,6 @@ graph.add_edge("validate", "sentiment")
 graph.add_edge("sentiment", "preprocess")
 graph.add_edge("preprocess", "decide")
 
-# Branching
 graph.add_conditional_edges(
     "decide",
     lambda state: state["action"],
