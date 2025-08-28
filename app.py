@@ -8,7 +8,8 @@ st.set_page_config(page_title="LangGraph Agent", layout="wide")
 with st.sidebar:
     st.header("⚙️ Settings")
 
-    llm_provider = st.selectbox("Select LLM Provider", ["Groq", "OpenAI"])
+    llm_provider = st.selectbox("Select LLM Provider", ["Groq", "OpenAI", "Gemini"])
+
     if llm_provider == "Groq":
         model = st.selectbox(
             "Select Model",
@@ -21,8 +22,19 @@ with st.sidebar:
                 "llama3-groq-70b-8192-tool-use-preview"
             ]
         )
-    else:
+    elif llm_provider == "OpenAI":
         model = st.selectbox("Select Model", ["gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"])
+    else:  # Gemini
+        model = st.selectbox(
+            "Select Model",
+            [
+                "gemini-2.0-flash",
+                "gemini-2.0-pro",
+                "gemini-pro",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro"
+            ]
+        )
 
     api_key = st.text_input(f"{llm_provider} API Key", type="password")
 
@@ -33,7 +45,7 @@ with st.sidebar:
 
 # ---- Main title ----
 st.markdown(
-"<h1 style='text-align: center;'>🤖 AgentDesk: Talk with Multiple AI Agents</h1>",
+    "<h1 style='text-align: center;'>🤖 AgentDesk: Talk with Multiple AI Agents</h1>",
     unsafe_allow_html=True
 )
 
