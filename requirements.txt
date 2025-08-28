@@ -6,3 +6,6 @@ langchain-groq
 langchain-openai
 tavily-python
 python-dotenv
+langsmith
+google-generativeai
+langchain-google-genai
